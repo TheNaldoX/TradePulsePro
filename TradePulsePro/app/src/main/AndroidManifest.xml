@@ -6,7 +6,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="TradePulse Pro"
+        android:label="TradePulse Pro V3"
         android:supportsRtl="true"
         android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
@@ -16,7 +16,7 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.action.LAUNCHER" />
             </intent-filter>
         </activity>
     </application>
