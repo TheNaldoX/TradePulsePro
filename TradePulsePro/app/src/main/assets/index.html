@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#090D16" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>TradePulse Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { background-color: #090D16; color: #F8FAFC; font-family: system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; user-select: none; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #090D16; }
+    ::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    const INITIAL_STOCKS = [
+      { symbol: "NVDA", name: "Nvidia", envelope: "CTO", currency: "USD", price: 162.56, priceEur: 147.78, high52w: 243.0, sma200: 176.4, rsi: 36.4, forwardPE: 21.4, divYield: 0.62, exDivDate: "02/12", targetBuyEur: 145.0, category: "Croissance IA" },
+      { symbol: "TTE.PA", name: "TotalEnergies", envelope: "PEA", currency: "EUR", price: 56.40, priceEur: 56.40, high52w: 69.80, sma200: 61.20, rsi: 33.8, forwardPE: 7.4, divYield: 5.65, exDivDate: "02/01", targetBuyEur: 55.50, category: "Dividende PEA" },
+      { symbol: "ASML.AS", name: "ASML Holding", envelope: "PEA", currency: "EUR", price: 642.0, priceEur: 642.0, high52w: 985.0, sma200: 765.0, rsi: 31.2, forwardPE: 24.8, divYield: 1.05, exDivDate: "28/01", targetBuyEur: 635.0, category: "Tech PEA" },
+      { symbol: "O", name: "Realty Income", envelope: "CTO", currency: "USD", price: 55.80, priceEur: 50.73, high52w: 64.80, sma200: 57.90, rsi: 38.5, forwardPE: 13.2, divYield: 5.48, exDivDate: "29/11", targetBuyEur: 50.00, category: "Loyer Mensuel" },
+      { symbol: "CS.PA", name: "AXA", envelope: "PEA", currency: "EUR", price: 33.10, priceEur: 33.10, high52w: 36.90, sma200: 33.80, rsi: 43.2, forwardPE: 8.9, divYield: 5.98, exDivDate: "05/05", targetBuyEur: 32.50, category: "Dividende PEA" },
+      { symbol: "EXCH.DE", name: "Xtrackers Euro Div ETF", envelope: "PEA", currency: "EUR", price: 24.15, priceEur: 24.15, high52w: 25.80, sma200: 23.90, rsi: 46.0, forwardPE: 11.2, divYield: 4.28, exDivDate: "15/02", targetBuyEur: 23.80, category: "ETF PEA" },
+      { symbol: "MSFT", name: "Microsoft", envelope: "CTO", currency: "USD", price: 418.0, priceEur: 380.0, high52w: 468.0, sma200: 425.0, rsi: 44.1, forwardPE: 28.5, divYield: 0.78, exDivDate: "19/02", targetBuyEur: 368.0, category: "Croissance IA" },
+      { symbol: "SAN.PA", name: "Sanofi", envelope: "PEA", currency: "EUR", price: 92.40, priceEur: 92.40, high52w: 105.5, sma200: 95.10, rsi: 39.8, forwardPE: 11.4, divYield: 4.10, exDivDate: "12/05", targetBuyEur: 90.00, category: "Dividende PEA" }
+    ];
+
+    function computeScore(s) {
+      const drawdown = ((s.price - s.high52w) / s.high52w) * 100;
+      let score = 0;
+      if (s.rsi < 33) score += 35;
+      else if (s.rsi < 40) score += 25;
+      else if (s.rsi < 48) score += 12;
+      if (drawdown <= -25) score += 25;
+      else if (drawdown <= -15) score += 18;
+      else if (drawdown <= -10) score += 10;
+      if (s.price <= s.sma200) score += 10;
+      if (s.divYield >= 4.5) score += 20;
+      else if (s.divYield >= 2.5) score += 10;
+      if (s.forwardPE > 0 && s.forwardPE < 22) score += 10;
+      return { score: Math.min(100, score), drawdown };
+    }
+
+    function App() {
+      const [tab, setTab] = useState("portfolio");
+      const [nvdaPriceEur, setNvdaPriceEur] = useState(151.40);
+      const [targetSellEur, setTargetSellEur] = useState(185.00);
+      const [monthlySaving, setMonthlySaving] = useState(225);
+      const [years, setYears] = useState(10);
+      const [filter, setFilter] = useState("ALL");
+
+      const buyPrice = 145.02;
+      const fees = 2.00;
+      const currentGross = nvdaPriceEur - buyPrice;
+      const currentNet = currentGross > 0 ? (currentGross * 0.7) - fees : currentGross - fees;
+      const targetGross = targetSellEur - buyPrice;
+      const targetNet = targetGross > 0 ? (targetGross * 0.7) - fees : targetGross - fees;
+
+      const stocksWithScore = useMemo(() => {
+        return INITIAL_STOCKS.map(s => {
+          const { score, drawdown } = computeScore(s);
+          return { ...s, score, drawdown };
+        }).filter(s => filter === "ALL" || s.envelope === filter)
+          .sort((a, b) => b.score - a.score);
+      }, [filter]);
+
+      const projection = useMemo(() => {
+        const r = 0.07 / 12;
+        const n = years * 12;
+        const futureVal = 150 * Math.pow(1 + r, n) + monthlySaving * ((Math.pow(1 + r, n) - 1) / r);
+        const invested = 150 + monthlySaving * n;
+        const monthlyDividend = (futureVal * 0.05) / 12;
+        return { futureVal, invested, monthlyDividend };
+      }, [monthlySaving, years]);
+
+      return (
+        <div className="min-h-screen pb-24 max-w-4xl mx-auto px-4 pt-4">
+          <header className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-2xl p-4 mb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <h1 className="text-lg font-bold tracking-tight text-white">TradePulse Pro</h1>
+                <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">Z Fold Ready</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">100% Autonome • Trade Republic CTO & PEA</p>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-slate-400">Ligne NVDA (145,02 €)</div>
+              <div className={`text-sm font-bold ${currentNet >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                {currentNet >= 0 ? "+" : ""}{currentNet.toFixed(2)} € net
+              </div>
+            </div>
+          </header>
+
+          {tab === "portfolio" && (
+            <div className="space-y-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <span className="text-xs uppercase tracking-wider text-emerald-400 font-semibold">Position Active • CTO</span>
+                    <h2 className="text-xl font-bold text-white">Nvidia Corp. (NVDA)</h2>
+                    <p className="text-xs text-slate-400">1,00 action achetée à 145,02 € • Dividende le 23/12 (~0,17 € net)</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-black text-white">{nvdaPriceEur.toFixed(2)} €</div>
+                    <div className="text-xs text-emerald-400">+{(((nvdaPriceEur - buyPrice)/buyPrice)*100).toFixed(1)}% depuis achat</div>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <div className="flex justify-between text-xs text-slate-400 mb-1">
+                    <span>Simuler le cours actuel NVDA (€)</span>
+                    <span className="text-white font-semibold">{nvdaPriceEur.toFixed(2)} €</span>
+                  </div>
+                  <input type="range" min="130" max="240" step="0.5" value={nvdaPriceEur} onChange={e => setNvdaPriceEur(parseFloat(e.target.value))} className="w-full accent-emerald-400" />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
+                  <div>
+                    <div className="text-[11px] text-slate-400">Prix d'achat</div>
+                    <div className="text-sm font-bold text-white">145,02 €</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-400">Stop Zéro Perte</div>
+                    <div className="text-sm font-bold text-amber-400">147,02 €</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-400">Gain Net Actuel</div>
+                    <div className={`text-sm font-bold ${currentNet >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {currentNet >= 0 ? "+" : ""}{currentNet.toFixed(2)} €
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <h3 className="text-sm font-bold text-white mb-2">Simulateur de Paliers de Revente (Après Flat Tax 30% & 2€ frais)</h3>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {[
+                    { label: "Court Terme", price: 165, desc: "~181 $" },
+                    { label: "Moyen Terme", price: 185, desc: "~203 $" },
+                    { label: "Long Terme", price: 225, desc: "Record ~247 $" }
+                  ].map(p => (
+                    <button key={p.price} onClick={() => setTargetSellEur(p.price)} className={`p-2.5 rounded-xl border text-left transition ${targetSellEur === p.price ? "bg-emerald-500/20 border-emerald-400 text-white" : "bg-slate-950 border-slate-800 text-slate-300"}`}>
+                      <div className="text-[11px] text-slate-400">{p.label}</div>
+                      <div className="text-base font-bold">{p.price} €</div>
+                      <div className="text-[10px] text-emerald-400">{p.desc}</div>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex justify-between text-xs text-slate-400 mb-1">
+                  <span>Objectif de vente personnalisé</span>
+                  <span className="text-white font-bold">{targetSellEur.toFixed(2)} €</span>
+                </div>
+                <input type="range" min="150" max="260" step="1" value={targetSellEur} onChange={e => setTargetSellEur(parseFloat(e.target.value))} className="w-full accent-indigo-400 mb-3" />
+                <div className="flex justify-between items-center bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-3">
+                  <div>
+                    <div className="text-xs text-indigo-200">Plus-value nette en poche à {targetSellEur} €</div>
+                    <div className="text-[11px] text-slate-400">Plus-value brute : +{targetGross.toFixed(2)} €</div>
+                  </div>
+                  <div className="text-xl font-black text-emerald-400">+{targetNet.toFixed(2)} € net</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === "screener" && (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                {["ALL", "PEA", "CTO"].map(f => (
+                  <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${filter === f ? "bg-emerald-500 text-slate-950 border-emerald-400" : "bg-slate-900 text-slate-300 border-slate-800"}`}>
+                    {f === "ALL" ? "Toutes les actions" : `Éligible ${f}`}
+                  </button>
+                ))}
+              </div>
+              {stocksWithScore.map(s => (
+                <div key={s.symbol} className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-sm">{s.name}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${s.envelope === "PEA" ? "bg-indigo-500/20 text-indigo-300" : "bg-amber-500/20 text-amber-300"}`}>{s.envelope}</span>
+                      <span className="text-[10px] text-slate-400">{s.category}</span>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1 flex gap-3">
+                      <span>Cours: <b className="text-white">{s.priceEur.toFixed(2)} €</b></span>
+                      <span>Cible: <b className="text-emerald-400">{s.targetBuyEur.toFixed(2)} €</b></span>
+                      <span>RSI: <b className={s.rsi < 38 ? "text-emerald-400" : "text-slate-200"}>{s.rsi}</b></span>
+                      <span>Div: <b className="text-indigo-300">{s.divYield}%</b></span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`text-xs font-black px-2.5 py-1 rounded-lg ${s.score >= 60 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-slate-800 text-slate-300"}`}>
+                      Score {s.score}/100
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1">{s.drawdown.toFixed(1)}% / 1 an</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab === "passive" && (
+            <div className="space-y-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <h2 className="text-base font-bold text-white mb-1">Simulateur Revenus Passifs (150 € – 300 €/mois)</h2>
+                <p className="text-xs text-slate-400 mb-4">Plans d'épargne programmés Trade Republic (0 € de frais)</p>
+
+                <div className="space-y-3 mb-4">
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-400">Épargne mensuelle programmée</span>
+                      <span className="font-bold text-emerald-400">{monthlySaving} € / mois</span>
+                    </div>
+                    <input type="range" min="50" max="600" step="25" value={monthlySaving} onChange={e => setMonthlySaving(parseInt(e.target.value))} className="w-full accent-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-400">Horizon de placement</span>
+                      <span className="font-bold text-indigo-400">{years} ans</span>
+                    </div>
+                    <input type="range" min="3" max="25" step="1" value={years} onChange={e => setYears(parseInt(e.target.value))} className="w-full accent-indigo-400" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                  <div>
+                    <div className="text-[10px] text-slate-400">Total Versé</div>
+                    <div className="text-sm font-bold text-slate-200">{Math.round(projection.invested).toLocaleString()} €</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400">Capital Final (7%)</div>
+                    <div className="text-sm font-bold text-white">{Math.round(projection.futureVal).toLocaleString()} €</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400">Rente Passive</div>
+                    <div className="text-sm font-black text-emerald-400">{Math.round(projection.monthlyDividend)} € / mois</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <h3 className="text-sm font-bold text-white mb-2">Répartition Automatique de tes {monthlySaving} € / mois</h3>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                    <span><b>60% PEA</b> • ETF Xtrackers Euro Stoxx Quality Div</span>
+                    <span className="font-bold text-emerald-400">{Math.round(monthlySaving * 0.6)} € / mois</span>
+                  </div>
+                  <div className="flex justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                    <span><b>20% PEA</b> • TotalEnergies + AXA (Trimestriel/Annuel)</span>
+                    <span className="font-bold text-indigo-400">{Math.round(monthlySaving * 0.2)} € / mois</span>
+                  </div>
+                  <div className="flex justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                    <span><b>20% CTO</b> • Realty Income (Loyer versé chaque mois)</span>
+                    <span className="font-bold text-amber-400">{Math.round(monthlySaving * 0.2)} € / mois</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 flex justify-around py-3 px-2 max-w-4xl mx-auto">
+            {[
+              { id: "portfolio", label: "Portefeuille NVDA" },
+              { id: "screener", label: "Radar Bourse" },
+              { id: "passive", label: "Rente Passive" }
+            ].map(item => (
+              <button key={item.id} onClick={() => setTab(item.id)} className={`px-4 py-1.5 rounded-xl text-xs font-bold transition ${tab === item.id ? "bg-emerald-500 text-slate-950" : "text-slate-400"}`}>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
